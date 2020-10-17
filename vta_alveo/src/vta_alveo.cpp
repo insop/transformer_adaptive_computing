@@ -8,9 +8,8 @@
 
 #include <string.h>
 
-#include "./vta_alveo.h"
+#include "vta_alveo.h"
 
-#if 1
 template <typename WIDE_T, typename NARROW_T, typename IDX_T, int WIDE_W, int NARROW_W, int Y_DIM, int X_DIM>
 void read_tensor(
   IDX_T idx,
@@ -45,7 +44,8 @@ void write_tensor(
     dst[idx][p] = packet;
   }
 }
-#endif
+
+extern "C" {
 
 void vta_alveo(
   uint32_t insn_count,
@@ -136,25 +136,9 @@ void vta_alveo(
         acc_T a_tensor[VTA_BATCH][VTA_BLOCK_OUT];
         read_tensor<acc_vec_T, acc_T, acc_idx_T, VTA_ACC_WIDTH*VTA_BLOCK_OUT, VTA_ACC_WIDTH, VTA_BATCH, VTA_BLOCK_OUT>(acc_idx, acc_mem, a_tensor);
 
-//#pragma HLS ARRAY_PARTITION variable=w_tensor block factor=2 dim=1 partition
-//#pragma HLS ARRAY_PARTITION variable=i_tensor block factor=2 dim=1 partition
-//#pragma HLS ARRAY_PARTITION variable=a_tensor block factor=2 dim=1 partition
-
 	for (int i = 0; i < VTA_BATCH; i++) {
 	  for(int j = 0; j < VTA_BLOCK_OUT; j++) {
 
-#if 0
-            acc_vec_T acc = acc_mem[uop.gemm.dst_idx+i][j];
-            //acc_vec_T tmp = 0;
-	    for (int k = 0; k < VTA_BLOCK_IN; k++) {
-	      acc += (acc_vec_T) (inp_mem[uop.gemm.src_idx+i][k] * wgt_mem[uop.gemm.wgt_idx+j][k]);
-            }
-	    //acc += tmp;
-	    //acc_mem[uop.gemm.dst_idx+i][j] = reset_acc == true ? (acc_vec_T)0 : (acc_vec_T)acc.range(VTA_ACC_WIDTH*VTA_BLOCK_OUT - 1, 0);
-	    acc = (uop.gemm.src_idx << 16) | (uop.gemm.wgt_idx << 8) | (uop.gemm.dst_idx);
-	    //acc_mem[uop.gemm.dst_idx+i][j] = reset_acc == true ? (acc_vec_T)0 : (acc_vec_T)acc.range(VTA_ACC_WIDTH*VTA_BLOCK_OUT - 1, 0);
-	    acc_mem[i][j] = reset_acc == true ? (acc_vec_T)0 : (acc_vec_T)acc.range(VTA_ACC_WIDTH*VTA_BLOCK_OUT - 1, 0);
-#else
             acc_T accum = a_tensor[i][j];
             acc_T tmp = 0;
 	    for (int k = 0; k < VTA_BLOCK_IN; k++) {
@@ -165,7 +149,6 @@ void vta_alveo(
             }
 	    accum += tmp;
 	    a_tensor[i][j] = reset_acc == true ? (acc_T)0 : accum;
-#endif
 	  }
 	}
         // Write the results back into accumulator
@@ -180,3 +163,5 @@ void vta_alveo(
     }
   }
 }
+
+} // extern "C"

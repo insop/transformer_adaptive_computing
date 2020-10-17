@@ -94,6 +94,7 @@ LDCLFLAGS += -O3
 # Adding config files to linker
 LDCLFLAGS_krnl_vta_alveo += --config krnl_vta_alveo.ini 
 EXECUTABLE = vta_alveo
+# ISS update
 CMD_ARGS = -x $(BUILD_DIR)/krnl_vta_avleo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 EMCONFIG_DIR = $(TEMP_DIR)
 EMU_DIR = $(SDCARD)/data/emulation
@@ -146,12 +147,14 @@ endif
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 ifeq ($(HOST_ARCH), x86)
 	$(CP) $(EMCONFIG_DIR)/emconfig.json .
+	# ISS update
 	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ABS_COMMON_REPO)/common/utility/run_emulation.pl "./${LAUNCH_EMULATOR} | tee run_app.log" "./${RUN_APP_SCRIPT} $(TARGET)" "${RESULT_STRING}" "7"
 endif
 else
 ifeq ($(HOST_ARCH), x86)
+	# ISS update
 	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 endif
 endif
@@ -172,12 +175,14 @@ endif
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 ifeq ($(HOST_ARCH), x86)
 	$(CP) $(EMCONFIG_DIR)/emconfig.json .
+	# ISS udpate
 	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ABS_COMMON_REPO)/common/utility/run_emulation.pl "./${LAUNCH_EMULATOR} | tee run_app.log" "./${RUN_APP_SCRIPT} $(TARGET)" "${RESULT_STRING}" "7"
 endif
 else
 ifeq ($(HOST_ARCH), x86)
+	# ISS update
 	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 endif
 endif
@@ -186,12 +191,14 @@ endif
 test: $(EXECUTABLE)
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 ifeq ($(HOST_ARCH), x86)
+	# ISS update
 	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ABS_COMMON_REPO)/common/utility/run_emulation.pl "./${LAUNCH_EMULATOR} | tee embedded_run.log" "./${RUN_APP_SCRIPT} $(TARGET)" "${RESULT_STRING}" "7"
 endif
 else
 ifeq ($(HOST_ARCH), x86)
+	# ISS update
 	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ECHO) "Please copy the content of sd_card folder and data to an SD Card and run on the board"
