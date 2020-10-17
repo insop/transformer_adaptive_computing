@@ -70,6 +70,7 @@ LDFLAGS += $(opencl_LDFLAGS)
 
 ############################## Setting up Host Variables ##############################
 #Include Required Host Source Files
+# ISS update
 HOST_SRCS += src/host.cpp src/fpga_kmeans.cpp src/kmeans_clustering_cmodel.c 
 # Host compiler global settings
 CXXFLAGS += -fmessage-length=0
@@ -91,15 +92,15 @@ endif
 LDCLFLAGS += -O3
 
 # Adding config files to linker
-LDCLFLAGS_krnl_kmeans += --config krnl_kmeans.ini 
-EXECUTABLE = kmeans
-CMD_ARGS = -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+LDCLFLAGS_krnl_vta_alveo += --config krnl_vta_alveo.ini 
+EXECUTABLE = vta_alveo
+CMD_ARGS = -x $(BUILD_DIR)/krnl_vta_avleo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 EMCONFIG_DIR = $(TEMP_DIR)
 EMU_DIR = $(SDCARD)/data/emulation
 
 ############################## Declaring Binary Containers ##############################
-BINARY_CONTAINERS += $(BUILD_DIR)/krnl_kmeans.xclbin
-BINARY_CONTAINER_krnl_kmeans_OBJS += $(TEMP_DIR)/kmeans.xo
+BINARY_CONTAINERS += $(BUILD_DIR)/krnl_vta_alveo.xclbin
+BINARY_CONTAINER_krnl_vta_alveo_OBJS += $(TEMP_DIR)/vta_alveo.xo
 
 ############################## Setting Targets ##############################
 CP = cp -rf
@@ -115,12 +116,12 @@ exe: $(EXECUTABLE)
 build: check-vitis $(BINARY_CONTAINERS)
 
 ############################## Setting Rules for Binary Containers (Building Kernels) ##############################
-$(TEMP_DIR)/kmeans.xo: src/krnl_kmeans.cpp
+$(TEMP_DIR)/vta_alveo.xo: src/vta_alveo.cpp
 	mkdir -p $(TEMP_DIR)
-	$(VPP) $(CLFLAGS) --temp_dir $(TEMP_DIR) -c -k kmeans -I'$(<D)' -o'$@' '$<'
-$(BUILD_DIR)/krnl_kmeans.xclbin: $(BINARY_CONTAINER_krnl_kmeans_OBJS)
+	$(VPP) $(CLFLAGS) --temp_dir $(TEMP_DIR) -c -k vta_alveo -I'$(<D)' -o'$@' '$<'
+$(BUILD_DIR)/krnl_vta_alveo.xclbin: $(BINARY_CONTAINER_krnl_vta_alveo_OBJS)
 	mkdir -p $(BUILD_DIR)
-	$(VPP) $(CLFLAGS) --temp_dir $(BUILD_DIR) -l $(LDCLFLAGS) $(LDCLFLAGS_krnl_kmeans) -o'$@' $(+)
+	$(VPP) $(CLFLAGS) --temp_dir $(BUILD_DIR) -l $(LDCLFLAGS) $(LDCLFLAGS_krnl_vta_alveo) -o'$@' $(+)
 
 ############################## Setting Rules for Host (Building Host Executable) ##############################
 $(EXECUTABLE): check-xrt $(HOST_SRCS) $(HOST_HDRS)
@@ -145,13 +146,13 @@ endif
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 ifeq ($(HOST_ARCH), x86)
 	$(CP) $(EMCONFIG_DIR)/emconfig.json .
-	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ABS_COMMON_REPO)/common/utility/run_emulation.pl "./${LAUNCH_EMULATOR} | tee run_app.log" "./${RUN_APP_SCRIPT} $(TARGET)" "${RESULT_STRING}" "7"
 endif
 else
 ifeq ($(HOST_ARCH), x86)
-	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 endif
 endif
 
@@ -171,13 +172,13 @@ endif
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 ifeq ($(HOST_ARCH), x86)
 	$(CP) $(EMCONFIG_DIR)/emconfig.json .
-	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ABS_COMMON_REPO)/common/utility/run_emulation.pl "./${LAUNCH_EMULATOR} | tee run_app.log" "./${RUN_APP_SCRIPT} $(TARGET)" "${RESULT_STRING}" "7"
 endif
 else
 ifeq ($(HOST_ARCH), x86)
-	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 endif
 endif
 
@@ -185,13 +186,13 @@ endif
 test: $(EXECUTABLE)
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 ifeq ($(HOST_ARCH), x86)
-	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+	XCL_EMULATION_MODE=$(TARGET) ./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ABS_COMMON_REPO)/common/utility/run_emulation.pl "./${LAUNCH_EMULATOR} | tee embedded_run.log" "./${RUN_APP_SCRIPT} $(TARGET)" "${RESULT_STRING}" "7"
 endif
 else
 ifeq ($(HOST_ARCH), x86)
-	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_kmeans.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
+	./$(EXECUTABLE) -x $(BUILD_DIR)/krnl_vta_alveo.xclbin -i ./data/100 -c ./data/100.gold_c10 -n 10
 else
 	$(ECHO) "Please copy the content of sd_card folder and data to an SD Card and run on the board"
 endif
@@ -201,7 +202,7 @@ endif
 ############################## Preparing sdcard ##############################
 sd_card: gen_run_app
 ifneq ($(HOST_ARCH), x86)
-	$(VPP) -t $(TARGET) --platform $(DEVICE) -p $(BUILD_DIR)/krnl_kmeans.xclbin --package.out_dir $(PACKAGE_OUT) --package.rootfs $(EDGE_COMMON_SW)/rootfs.ext4 --package.sd_file $(SD_IMAGE_FILE) --package.sd_file xrt.ini --package.sd_file $(RUN_APP_SCRIPT) --package.sd_file $(EXECUTABLE) --package.sd_file ./data/100 --package.sd_file ./data/100.gold_c10 --package.sd_file 10 -o krnl_kmeans.xclbin
+	$(VPP) -t $(TARGET) --platform $(DEVICE) -p $(BUILD_DIR)/krnl_vta_alveo.xclbin --package.out_dir $(PACKAGE_OUT) --package.rootfs $(EDGE_COMMON_SW)/rootfs.ext4 --package.sd_file $(SD_IMAGE_FILE) --package.sd_file xrt.ini --package.sd_file $(RUN_APP_SCRIPT) --package.sd_file $(EXECUTABLE) --package.sd_file ./data/100 --package.sd_file ./data/100.gold_c10 --package.sd_file 10 -o krnl_vta_alveo.xclbin
 endif
 
 ############################## Cleaning Rules ##############################
