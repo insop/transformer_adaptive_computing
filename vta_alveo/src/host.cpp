@@ -20,11 +20,11 @@ int main(int argc, char *argv[]) {
   int status = mem_test(128, 128);
 
   // Run reset test
-  status |= reset_test(128, 128);
+  //status |= reset_test(128, 128);
   // Run fully connected layer test
-  status |= fc_test(64, 128, 128);
+  ////status |= fc_test(64, 128, 128);
 
-  return 0;
+  return status;
 
 #endif
 

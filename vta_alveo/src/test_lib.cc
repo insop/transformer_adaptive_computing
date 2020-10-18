@@ -6,6 +6,10 @@
 
 #include "./test_lib.h"
 
+#include "xcl2.hpp"
+#include <algorithm>
+#include <vector>
+
 uint32_t globalSeed;
 
 #define VTA_DEBUG 1
@@ -269,8 +273,8 @@ void free4dArray(T ****array, int ax0, int ax1, int ax2, int ax3) {
 void * allocBuffer(size_t num_bytes) {
 #ifdef NO_SIM
   // ISS
-  return malloc(num_bytes);
   //return cma_alloc(num_bytes, CACHED);
+  return (void*)NULL;
 #else
   return malloc(num_bytes);
 #endif
@@ -279,8 +283,8 @@ void * allocBuffer(size_t num_bytes) {
 void freeBuffer(void * buffer) {
 #ifdef NO_SIM
   // ISS
-  return free(buffer);
   //return cma_free(buffer);
+  return;
 #else
   return free(buffer);
 #endif
@@ -313,6 +317,7 @@ VTAGenericInsn getGEMMInsn(int uop_size, bool reset) {
   return converter.generic;
 }
 
+#if 0
 VTAGenericUop * getResetUops(int batch, int out_feat) {
   // Converter
   union VTAUop converter;
@@ -321,8 +326,7 @@ VTAGenericUop * getResetUops(int batch, int out_feat) {
   // Allocate buffer
 #ifdef NO_SIM
   // ISS
-  VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(malloc(sizeof(VTAGenericUop) * uop_size));
-  //VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(cma_alloc(sizeof(VTAGenericUop) * uop_size, CACHED));
+  VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(cma_alloc(sizeof(VTAGenericUop) * uop_size, CACHED));
 #else
   VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(malloc(sizeof(VTAGenericUop) * uop_size));
 #endif
@@ -347,8 +351,7 @@ VTAGenericUop * getGEMMUops(int batch, int in_feat, int out_feat) {
   // Allocate buffer
 #ifdef NO_SIM
   // ISS
-  VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(malloc(sizeof(VTAGenericUop) * uop_size));
-  //VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(cma_alloc(sizeof(VTAGenericUop) * uop_size, CACHED));
+  VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(cma_alloc(sizeof(VTAGenericUop) * uop_size, CACHED));
 #else
   VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(malloc(sizeof(VTAGenericUop) * uop_size));
 #endif
@@ -367,46 +370,7 @@ VTAGenericUop * getGEMMUops(int batch, int in_feat, int out_feat) {
   return uop_buf;
 }
 
-VTAGenericUop * getConv2dUops(int batch, int height, int width, int kheight, int kwidth,
-    int in_channels, int out_channels) {
-  // Converter
-  union VTAUop converter;
-  // Derive the total uop size
-  int uop_size = batch * in_channels * out_channels * height * width * kheight * kwidth;
-  // Derive padding
-  int ypad = (kheight - 1) / 2;
-  int xpad = (kwidth - 1) / 2;
-  // Allocate buffer
-#ifdef NO_SIM
-   // ISS
-  VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(malloc(sizeof(VTAGenericUop) * uop_size));
-  // VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(cma_alloc(sizeof(VTAGenericUop) * uop_size, CACHED));
-#else
-  VTAGenericUop *uop_buf = static_cast<VTAGenericUop *>(malloc(sizeof(VTAGenericUop) * uop_size));
 #endif
-  // Generate micro ops
-  int uop_idx = 0;
-  for (int b = 0; b < batch; b++) {
-    for (int y = ypad; y < height - ypad; y++) {
-      for (int x = xpad; x < width - xpad; x++) {
-        for (int oc = 0; oc < out_channels; oc++) {
-          for (int dy = 0 - ypad; dy < ypad + 1; dy++) {
-            for (int dx = 0 - xpad; dx < xpad + 1; dx++) {
-              for (int ic = 0; ic < in_channels; ic++) {
-                // TODO Part 2: Derive 2D convolution indices
-                converter.gemm.dst_idx = 0;
-                converter.gemm.src_idx = 0;
-                converter.gemm.wgt_idx = 0;
-                uop_buf[uop_idx++] = converter.generic;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return uop_buf;
-}
 
 void printParameters() {
   // Some debugging code
@@ -497,6 +461,7 @@ int mem_test(int batch, int out_channels) {
   // Make sure we don't exceed buffer bounds
   assert(xfer_size <= VTA_ACC_BUFF_DEPTH);
 
+#ifndef NO_SIM
   // Initialize instruction buffer
   VTAGenericInsn *insn_buf =
       static_cast<VTAGenericInsn *>(allocBuffer(sizeof(VTAGenericInsn) * ins_size));
@@ -510,6 +475,23 @@ int mem_test(int batch, int out_channels) {
                                  VTA_MEM_ID_ACC,
                                  xfer_size);
 
+#else
+  // ISS OCL allocator =====>
+  // Initialize instruction buffer
+  //
+  std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>> insn_buf(ins_size);
+  // Load data block
+  insn_buf[0] = getLoadStoreInsn(VTA_OPCODE_LOAD,
+                                 VTA_MEM_ID_ACC,
+                                 xfer_size);
+  // Store data block
+  insn_buf[1] = getLoadStoreInsn(VTA_OPCODE_STORE,
+                                 VTA_MEM_ID_ACC,
+                                 xfer_size);
+  // ISS OCL allocator <=====>
+#endif // NO_SIM
+
+
 #if VTA_DEBUG == 1
   printInstruction(ins_size, insn_buf);
 #endif
@@ -519,6 +501,9 @@ int mem_test(int batch, int out_channels) {
 
   // Reference output
   acc_T **outputs_ref = alloc2dArray<acc_T>(batch, out_channels);
+
+#ifndef NO_SIM
+
   for (int i = 0; i < batch; i++) {
     for (int j = 0; j < out_channels; j++) {
       outputs_ref[i][j] = inputs[i][j];
@@ -536,8 +521,24 @@ int mem_test(int batch, int out_channels) {
   // Prepare the output buffer
   acc_T *output_buf = static_cast<acc_T *>(allocBuffer(VTA_ACC_ELEM_BYTES * xfer_size));
 
+#else
+  // ISS OCL allocator =====>
+  // Prepare the input buffer
+  //
+  std::vector<acc_T, aligned_allocator<acc_T>> input_buf(xfer_size);
+  std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
+
+  pack2dBuffer<acc_T, VTA_ACC_WIDTH>(input_buf,
+                                     inputs,
+                                     batch,
+                                     out_channels,
+                                     VTA_BATCH,
+                                     VTA_BLOCK_OUT);
+  // ISS OCL allocator <=====>
+#endif // NO_SIM
+
 #ifdef NO_SIM
-  // Invoke the VTA
+  // Invoke the VTA HW
   uint64_t t_fpga = vta_alveo(ins_size,
                         insn_buf,
                         NULL,
@@ -601,6 +602,7 @@ int mem_test(int batch, int out_channels) {
   }
 }
 
+#if 0
 int reset_test(int batch, int out_channels) {
   // Some assertions
   assert(out_channels % VTA_BLOCK_OUT == 0);
@@ -724,7 +726,9 @@ int reset_test(int batch, int out_channels) {
     return -1;
   }
 }
+#endif
 
+#if 0
 int fc_test(int batch, int in_channels, int out_channels) {
   // Some assertions
   assert(in_channels % VTA_BLOCK_IN == 0);
@@ -897,207 +901,4 @@ int fc_test(int batch, int in_channels, int out_channels) {
   }
 }
 
-
-int conv2d_test(int batch, int height, int width, int kheight, int kwidth,
-    int in_channels, int out_channels) {
-  // Some assertions
-  assert(in_channels % VTA_BLOCK_IN == 0);
-  assert(out_channels % VTA_BLOCK_OUT == 0);
-  assert(batch % VTA_BATCH == 0);
-
-  printf("=====================================================================================\n");
-  printf("INFO - 2D Convolution test: batch=%d, height=%d, width=%d\n", batch, height, width);
-  printf("                            kheight=%d, kwidth=%d\n", kheight, kwidth);
-  printf("                            in_channels=%d, out_channels=%d\n", in_channels, out_channels);
-
-  // Derive padding
-  int ypad = (kheight - 1) / 2;
-  int xpad = (kwidth - 1) / 2;
-  // Derive number of elements that need to be loaded/stored
-  int ins_size = 6;
-  int uop_size = batch / VTA_BATCH * in_channels / VTA_BLOCK_IN * out_channels / VTA_BLOCK_OUT *
-      (height - kheight + 1) * (width - kwidth + 1) * kheight * kwidth;
-  int inp_size = batch / VTA_BATCH * in_channels / VTA_BLOCK_IN * height * width;
-  int wgt_size = in_channels / VTA_BLOCK_IN * out_channels / VTA_BLOCK_OUT * kheight * kwidth;
-  int out_size = batch / VTA_BATCH * out_channels / VTA_BLOCK_OUT * height * width;
-  // Make sure we don't exceed buffer bounds
-#if VTA_DEBUG == 1
-  printf("INFO - uop size = %d/%d\n", uop_size, VTA_UOP_BUFF_DEPTH);
-  printf("INFO - input size = %d/%d\n", inp_size, VTA_INP_BUFF_DEPTH);
-  printf("INFO - weight size = %d/%d\n", wgt_size, VTA_WGT_BUFF_DEPTH);
-  printf("INFO - out size = %d/%d\n", out_size, VTA_ACC_BUFF_DEPTH);
 #endif
-  assert(uop_size <= VTA_UOP_BUFF_DEPTH);
-  assert(inp_size <= VTA_INP_BUFF_DEPTH);
-  assert(wgt_size <= VTA_WGT_BUFF_DEPTH);
-  assert(out_size <= VTA_ACC_BUFF_DEPTH);
-
-  // Initialize instruction buffer
-  VTAGenericInsn *insn_buf =
-      static_cast<VTAGenericInsn *>(allocBuffer(sizeof(VTAGenericInsn) * ins_size));
-
-  // Load uops
-  insn_buf[0] = getLoadStoreInsn(VTA_OPCODE_LOAD, VTA_MEM_ID_UOP, uop_size);
-  // Load bias block
-  insn_buf[1] = getLoadStoreInsn(VTA_OPCODE_LOAD, VTA_MEM_ID_ACC, out_size);
-  // Load input block
-  insn_buf[2] = getLoadStoreInsn(VTA_OPCODE_LOAD, VTA_MEM_ID_INP, inp_size);
-  // Load weight block
-  insn_buf[3] = getLoadStoreInsn(VTA_OPCODE_LOAD, VTA_MEM_ID_WGT, wgt_size);
-  // Perform GEMM
-  insn_buf[4] = getGEMMInsn(uop_size, false);
-  // Store output block
-  insn_buf[5] = getLoadStoreInsn(VTA_OPCODE_STORE, VTA_MEM_ID_ACC, out_size);
-
-  // Prepare the uop buffer
-  VTAGenericUop * uop_buf = getConv2dUops(batch / VTA_BATCH,
-                                      height,
-                                      width,
-                                      kheight,
-                                      kwidth,
-                                      in_channels / VTA_BLOCK_IN,
-                                      out_channels / VTA_BLOCK_OUT);
-
-#if VTA_DEBUG == 1
-  printInstruction(ins_size, insn_buf);
-  printMicroOp(uop_size, uop_buf);
-#endif
-
-  // Initialize inputs
-  inp_T ****inputs = allocInit4dArray<inp_T, VTA_INP_WIDTH>(batch, height, width, in_channels);
-  // Initialize weights
-  wgt_T ****weights = allocInit4dArray<wgt_T, VTA_WGT_WIDTH>(out_channels, kheight, kwidth, in_channels);
-  // Initialize biases
-  acc_T ****biases = allocInit4dArray<acc_T, VTA_ACC_WIDTH>(batch, height, width, out_channels);
-
-  // Reference output
-  acc_T ****outputs_ref = alloc4dArray<acc_T>(batch, height, width, out_channels);
-  for (int b = 0; b < batch; b++) {
-    for (int y = ypad; y < height - ypad; y++) {
-      for (int x = xpad; x < width - xpad; x++) {
-        for (int oc = 0; oc < out_channels; oc++) {
-          acc_T sum = biases[b][y][x][oc];
-          for (int dy = 0 - ypad; dy < ypad + 1; dy++) {
-            for (int dx = 0 - xpad; dx < xpad + 1; dx++) {
-              for (int ic = 0; ic < in_channels; ic++) {
-                sum += (acc_T) (inputs[b][y+dy][x+dx][ic] * weights[oc][dy+ypad][dx+xpad][ic]);
-              }
-            }
-          }
-          // Set
-          outputs_ref[b][y][x][oc] = sum;
-        }
-      }
-    }
-  }
-
-  // Prepare the input buffer
-  inp_T *input_buf = static_cast<inp_T *>(allocBuffer(VTA_INP_ELEM_BYTES * inp_size));
-  pack4dBuffer<inp_T, VTA_INP_WIDTH>(input_buf,
-                                     inputs,
-                                     batch,
-                                     height,
-                                     width,
-                                     in_channels,
-                                     VTA_BATCH,
-                                     VTA_BLOCK_IN);
-  // Prepare the weight buffer
-  wgt_T *weight_buf = static_cast<wgt_T *>(allocBuffer(VTA_WGT_ELEM_BYTES * wgt_size));
-  pack4dBuffer<wgt_T, VTA_WGT_WIDTH>(weight_buf,
-                                     weights,
-                                     out_channels,
-                                     kheight,
-                                     kwidth,
-                                     in_channels,
-                                     VTA_BLOCK_OUT,
-                                     VTA_BLOCK_IN);
-  // Prepare the bias buffer
-  acc_T *bias_buf = static_cast<acc_T *>(allocBuffer(VTA_ACC_ELEM_BYTES * out_size));
-  pack4dBuffer<acc_T, VTA_ACC_WIDTH>(bias_buf,
-                                     biases,
-                                     batch,
-                                     height,
-                                     width,
-                                     out_channels,
-                                     VTA_BATCH,
-                                     VTA_BLOCK_OUT);
-  // Prepare the output buffer
-  acc_T *output_buf = static_cast<acc_T *>(allocBuffer(VTA_ACC_ELEM_BYTES * out_size));
-
-#ifdef NO_SIM
-  // Invoke the VTA
-  uint64_t t_fpga = vta_alveo(ins_size,
-                        insn_buf,
-                        uop_buf,
-                        input_buf,
-                        weight_buf,
-                        bias_buf,
-                        output_buf);
-  // Report on timining
-  printf("INFO - Synchronization time: %.3lfms\n", static_cast<float>(t_fpga) / 1E6);
-  printf("INFO - Throughput: %.3lfGOPs/s\n",
-         static_cast<float>(uop_size) * VTA_BATCH * VTA_BLOCK_IN * VTA_BLOCK_OUT * 2 / t_fpga);
-#else
-  // Invoke the VTA
-  vta_alveo(ins_size,
-     (volatile insn_T *) insn_buf,
-     (volatile uop_T *) uop_buf,
-     (volatile inp_vec_T *) input_buf,
-     (volatile wgt_vec_T *) weight_buf,
-     (volatile acc_vec_T *) bias_buf,
-     (volatile acc_vec_T *) output_buf);
-#endif
-
-  // Unpack output data
-  acc_T ****outputs = alloc4dArray<acc_T>(batch, height, width, out_channels);
-  unpack4dBuffer<acc_T, VTA_ACC_WIDTH>(outputs,
-                                       output_buf,
-                                       batch,
-                                       height,
-                                       width,
-                                       out_channels,
-                                       VTA_BATCH,
-                                       VTA_BLOCK_OUT);
-
-  // Correctness checks
-  // Note we ignore the boundary elements
-  int err = 0;
-  for (int b = 0; b < batch; b++) {
-    for (int y = ypad; y < height - ypad; y++) {
-      for (int x = xpad; x < width - xpad; x++) {
-        for (int oc = 0; oc < out_channels; oc++) {
-          if (outputs_ref[b][y][x][oc] != outputs[b][y][x][oc]) {
-            err++;
-#if VTA_DEBUG == 1
-            printf("DEBUG - %d, %d, %d, %d: expected 0x%x but got 0x%x\n",
-                   b, y, x, oc,
-                   static_cast<int>(outputs_ref[b][y][x][oc]),
-                   static_cast<int>(outputs[b][y][x][oc]));
-#endif  // VTA_DEBUG == 1
-          }
-        }
-      }
-    }
-  }
-
-  // Free all allocated arrays
-  free4dArray<inp_T>(inputs, batch, height, width, in_channels);
-  free4dArray<wgt_T>(weights, out_channels, kheight, kwidth, in_channels);
-  free4dArray<acc_T>(biases, batch, height, width, out_channels);
-  free4dArray<acc_T>(outputs_ref, batch, height, width, out_channels);
-  free4dArray<acc_T>(outputs, batch, height, width, out_channels);
-  freeBuffer(insn_buf);
-  freeBuffer(uop_buf);
-  freeBuffer(input_buf);
-  freeBuffer(weight_buf);
-  freeBuffer(bias_buf);
-  freeBuffer(output_buf);
-
-  if (err == 0) {
-    printf("INFO - 2D Convolution test successful!\n");
-    return 0;
-  } else {
-    printf("INFO - 2D Convolution test failed, got %d errors!\n", err);
-    return -1;
-  }
-}

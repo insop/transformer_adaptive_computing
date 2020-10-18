@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-//#define NO_SIM 1
+#define NO_SIM 1
 
 #ifdef NO_SIM
 
