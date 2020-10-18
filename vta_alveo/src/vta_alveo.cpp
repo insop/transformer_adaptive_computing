@@ -55,14 +55,14 @@ void vta_alveo(
   volatile wgt_vec_T *weights,
   volatile acc_vec_T *biases,
   volatile acc_vec_T *outputs) {
-#pragma HLS INTERFACE s_axilite port = insn_count bundle = CONTROL_BUS
+#pragma HLS INTERFACE s_axilite port = insn_count bundle = control
 #pragma HLS INTERFACE m_axi port = insns offset = slave bundle = ins_port
 #pragma HLS INTERFACE m_axi port = uops offset = slave bundle = uop_port
 #pragma HLS INTERFACE m_axi port = inputs offset = slave bundle = narrow_port
 #pragma HLS INTERFACE m_axi port = weights offset = slave bundle = narrow_port
 #pragma HLS INTERFACE m_axi port = biases offset = slave bundle = wide_port
 #pragma HLS INTERFACE m_axi port = outputs offset = slave bundle = wide_port
-#pragma HLS INTERFACE s_axilite port = return bundle = CONTROL_BUS
+#pragma HLS INTERFACE s_axilite port = return bundle = control
 
   // Local SRAMs
   uop_T uop_mem[VTA_UOP_BUFF_DEPTH];
