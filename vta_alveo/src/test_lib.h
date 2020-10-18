@@ -13,16 +13,18 @@
 #include <stdlib.h>
 #include <time.h>
 
+//#define NO_SIM 1
+
 #ifdef NO_SIM
 
-  #include "../driver/pynq_driver.h"
+  // #include "../driver/pynq_driver.h"
   #include "./hw_spec.h"
 
   typedef int8_t wgt_T;
   typedef int8_t inp_T;
   typedef int32_t acc_T;
 
-  uint64_t vta(uint32_t insn_count,
+  uint64_t vta_alveo(uint32_t insn_count,
                VTAGenericInsn *insns,
                VTAGenericUop *uops,
                inp_T *inputs,
@@ -32,7 +34,7 @@
 
 #else  // NO_SIM
 
-  #include "./vta.h"
+  #include "./vta_alveo.h"
 
 #endif  // NO_SIM
 

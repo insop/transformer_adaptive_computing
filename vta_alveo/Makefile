@@ -71,7 +71,7 @@ LDFLAGS += $(opencl_LDFLAGS)
 ############################## Setting up Host Variables ##############################
 #Include Required Host Source Files
 # ISS update
-HOST_SRCS += src/host.cpp
+HOST_SRCS += src/host.cpp src/test_lib.cc src/vta_alveo.cpp
 # Host compiler global settings
 CXXFLAGS += -fmessage-length=0
 LDFLAGS += -lrt -lstdc++ 
@@ -115,6 +115,13 @@ exe: $(EXECUTABLE)
 
 .PHONY: build
 build: check-vitis $(BINARY_CONTAINERS)
+
+
+.PHONY: host
+host: $(EXECUTABLE)
+
+.PHONY: xclbin
+xclbin: build
 
 ############################## Setting Rules for Binary Containers (Building Kernels) ##############################
 $(TEMP_DIR)/vta_alveo.xo: src/vta_alveo.cpp
@@ -205,6 +212,16 @@ else
 endif
 endif
 
+#.PHONY: host
+#host: $(EXECUTABLE)
+
+############################## Setting Rules for Host (Building Host Executable) ##############################
+#$(EXECUTABLE): $(HOST_SRCS) | check-xrt
+#	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+
+emconfig:$(EMCONFIG_DIR)/emconfig.json
+$(EMCONFIG_DIR)/emconfig.json:
+	emconfigutil --platform $(DEVICE) --od $(EMCONFIG_DIR)
 
 ############################## Preparing sdcard ##############################
 sd_card: gen_run_app

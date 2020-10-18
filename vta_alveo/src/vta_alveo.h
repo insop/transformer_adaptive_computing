@@ -16,6 +16,8 @@
 
 #include "./hw_spec.h"
 
+extern "C" {
+
 /* \typedef inp_T Input datatype*/
 typedef ap_int<VTA_INP_WIDTH> inp_T;
 
@@ -74,7 +76,7 @@ typedef ap_uint<VTA_MEMOP_DRAM_ADDR_BIT_WIDTH> memop_dram_T;
 * \param biases Bias data base address in DRAM. AXI-4 master port.
 * \param outputs Output data base address in DRAM. AXI-4 master port.
 */
-void vta(
+void vta_alveo(
   uint32_t insn_count,
   volatile insn_T *insns,
   volatile uop_T *uops,
@@ -83,4 +85,5 @@ void vta(
   volatile acc_vec_T *biases,
   volatile acc_vec_T *outputs);
 
+} // extern "C"
 #endif  // VTA_VTA_H_
