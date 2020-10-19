@@ -18,15 +18,32 @@ uint32_t globalSeed;
 
 // pync driver to call h/w
 uint64_t vta_alveo(uint32_t insn_count,
-             VTAGenericInsn *insns,
+             //VTAGenericInsn *insns,
+             std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>>  &insns,
+
+						 // XXX TODO UPDATE THIS
              VTAGenericUop *uops,
+             //std::vector<VTAGenericUop, aligned_allocator<VTAGenericUop>>  &uops,
+
              inp_T *inputs,
              wgt_T *weights,
-             acc_T *biases,
-             acc_T *outputs) {
+             //acc_T *biases,
+             std::vector<acc_T, aligned_allocator<acc_T>> &biases,
+             //acc_T *outputs
+             std::vector<acc_T, aligned_allocator<acc_T>> &outputs
+						) {
   // Performance counter variables
   uint64_t t_fpga;
   struct timespec start, stop;
+
+#if 0
+	OCL_CHECK(err,
+						cl::Buffer buffer_in1(context,
+																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+																	matrix_size_bytes,
+																	source_in1.data(),
+																	&err));
+#endif
 
 #if 0
   // Program
@@ -493,7 +510,13 @@ int mem_test(int batch, int out_channels) {
 
 
 #if VTA_DEBUG == 1
+
+ #ifndef NO_SIM
   printInstruction(ins_size, insn_buf);
+ #else
+  printInstruction(ins_size, &insn_buf[0]);
+ #endif // NO_SIM
+
 #endif
 
   // Initialize input data
@@ -502,13 +525,14 @@ int mem_test(int batch, int out_channels) {
   // Reference output
   acc_T **outputs_ref = alloc2dArray<acc_T>(batch, out_channels);
 
-#ifndef NO_SIM
-
   for (int i = 0; i < batch; i++) {
     for (int j = 0; j < out_channels; j++) {
       outputs_ref[i][j] = inputs[i][j];
     }
   }
+
+#ifndef NO_SIM
+
 
   // Prepare the input buffer
   acc_T *input_buf = static_cast<acc_T *>(allocBuffer(VTA_ACC_ELEM_BYTES * xfer_size));
@@ -525,31 +549,49 @@ int mem_test(int batch, int out_channels) {
   // ISS OCL allocator =====>
   // Prepare the input buffer
   //
-  std::vector<acc_T, aligned_allocator<acc_T>> input_buf(xfer_size);
   std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
+  std::vector<acc_T, aligned_allocator<acc_T>> input_buf(xfer_size);
 
-  pack2dBuffer<acc_T, VTA_ACC_WIDTH>(input_buf,
+  pack2dBuffer<acc_T, VTA_ACC_WIDTH>(input_buf.data(), //&input_buf[0],
                                      inputs,
                                      batch,
                                      out_channels,
                                      VTA_BATCH,
                                      VTA_BLOCK_OUT);
+
+  //std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
+
   // ISS OCL allocator <=====>
 #endif // NO_SIM
 
 #ifdef NO_SIM
+
   // Invoke the VTA HW
   uint64_t t_fpga = vta_alveo(ins_size,
-                        insn_buf,
+                        //&insn_buf[0],
+												insn_buf,
                         NULL,
                         NULL,
                         NULL,
+                        //&input_buf[0],
                         input_buf,
-                        output_buf);
+                        //&output_buf[0]);
+                        output_buf
+												);
   // Report on timining
   printf("INFO - Synchronization time: %.3lfms\n", static_cast<float>(t_fpga) / 1E6);
   printf("INFO - Throughput: %.3lfGbs/s\n",
          static_cast<float>(xfer_size) * 2 * VTA_ACC_ELEM_BYTES * 8 / t_fpga);
+
+  // Unpack output data
+  acc_T **outputs = alloc2dArray<acc_T>(batch, out_channels);
+  unpack2dBuffer<acc_T, VTA_ACC_WIDTH>(outputs,
+                                       &output_buf[0],
+                                       batch,
+                                       out_channels,
+                                       VTA_BATCH,
+                                       VTA_BLOCK_OUT);
+
 #else
   // Invoke the VTA
   vta_alveo(ins_size,
@@ -559,7 +601,6 @@ int mem_test(int batch, int out_channels) {
       NULL,
       (volatile acc_vec_T *) input_buf,
       (volatile acc_vec_T *) output_buf);
-#endif
 
   // Unpack output data
   acc_T **outputs = alloc2dArray<acc_T>(batch, out_channels);
@@ -569,6 +610,7 @@ int mem_test(int batch, int out_channels) {
                                        out_channels,
                                        VTA_BATCH,
                                        VTA_BLOCK_OUT);
+#endif // NO_SIM
 
   // Correctness checks
   int err = 0;
@@ -589,9 +631,11 @@ int mem_test(int batch, int out_channels) {
   free2dArray<acc_T>(inputs, batch, out_channels);
   free2dArray<acc_T>(outputs_ref, batch, out_channels);
   free2dArray<acc_T>(outputs, batch, out_channels);
+#ifndef NO_SIM
   freeBuffer(insn_buf);
   freeBuffer(input_buf);
   freeBuffer(output_buf);
+#endif // NO_SIM
 
   if (err == 0) {
     printf("INFO - Load/Store test successful!\n");

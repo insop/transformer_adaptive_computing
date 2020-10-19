@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <vector>
 
 #define NO_SIM 1
 
@@ -24,13 +25,28 @@
   typedef int8_t inp_T;
   typedef int32_t acc_T;
 
-  uint64_t vta_alveo(uint32_t insn_count,
-               VTAGenericInsn *insns,
-               VTAGenericUop *uops,
-               inp_T *inputs,
-               wgt_T *weights,
-               acc_T *biases,
-               acc_T *outputs);
+#if 0
+  //uint64_t vta_alveo(uint32_t insn_count,
+               //VTAGenericInsn *insns,
+               //VTAGenericUop *uops,
+               //inp_T *inputs,
+               //wgt_T *weights,
+               //acc_T *biases,
+               //acc_T *outputs);
+//
+uint64_t vta_alveo(uint32_t insn_count,
+             //VTAGenericInsn *insns,
+             std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>>  &insns,
+             //VTAGenericUop *uops,
+             std::vector<VTAGenericUop, aligned_allocator<VTAGenericUop>>  &uops,
+             inp_T *inputs,
+             wgt_T *weights,
+             //acc_T *biases,
+             std::vector<acc_T, aligned_allocator<acc_T>> &biases,
+             //acc_T *outputs
+             std::vector<acc_T, aligned_allocator<acc_T>> &outputs
+						);
+#endif // 0
 
 #else  // NO_SIM
 
