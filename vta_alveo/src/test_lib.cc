@@ -36,6 +36,10 @@ uint64_t vta_alveo(uint32_t insn_count,
   uint64_t t_fpga;
   struct timespec start, stop;
 
+  // TODO fix this
+	size_t matrix_size_bytes = 1024;
+
+// TODO from here
 #if 0
 	OCL_CHECK(err,
 						cl::Buffer buffer_in1(context,
