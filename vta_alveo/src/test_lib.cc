@@ -16,6 +16,19 @@ uint32_t globalSeed;
 
 #ifdef NO_SIM
 
+uint64_t get_duration_ns(const cl::Event &event) {
+    cl_int err;
+    uint64_t nstimestart, nstimeend;
+    OCL_CHECK(err,
+              err = event.getProfilingInfo<uint64_t>(CL_PROFILING_COMMAND_START,
+                                                     &nstimestart));
+    OCL_CHECK(err,
+              err = event.getProfilingInfo<uint64_t>(CL_PROFILING_COMMAND_END,
+                                                     &nstimeend));
+    return (nstimeend - nstimestart);
+}
+
+
 // pync driver to call h/w
 uint64_t vta_alveo(uint32_t insn_count,
              //VTAGenericInsn *insns,
@@ -35,19 +48,69 @@ uint64_t vta_alveo(uint32_t insn_count,
   // Performance counter variables
   uint64_t t_fpga;
   struct timespec start, stop;
+  cl_int err;
 
   // TODO fix this
-	size_t matrix_size_bytes = 1024;
+	size_t matrix_size_bytes = (sizeof(insns[0]) * insns.size());
 
-// TODO from here
-#if 0
+  printf("%s:%d insn size %d, len %d total %d\n", __func__, __LINE__,
+			sizeof(insns[0]), insns.size(), matrix_size_bytes);
+  printf("%s:%d ocl context 0x%x\n", __func__, __LINE__, OCL_CTX_p->context);
+
 	OCL_CHECK(err,
-						cl::Buffer buffer_in1(context,
+						cl::Buffer buffer_insns(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
 																	matrix_size_bytes,
-																	source_in1.data(),
+																	insns.data(),
 																	&err));
-#endif
+
+  // XXX uops
+  // XXX inputs
+  //
+
+	matrix_size_bytes = (sizeof(biases[0]) * biases.size());
+	OCL_CHECK(err,
+						cl::Buffer buffer_biases(OCL_CTX_p->context,
+																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+																	matrix_size_bytes,
+																  biases.data(),
+																	&err));
+	matrix_size_bytes = (sizeof(outputs[0]) * outputs.size());
+	OCL_CHECK(err,
+						cl::Buffer buffer_outputs(OCL_CTX_p->context,
+																	CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+																	matrix_size_bytes,
+																	outputs.data(),
+																	&err));
+
+  //OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, 0));
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, insn_count));
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(1, buffer_insns));
+  //2
+  //3
+  //4
+  //XXX
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(5, buffer_biases));
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(6, buffer_outputs));
+
+  //OCL_CHECK(err,
+   //               err = OCL_CTX_p->q.enqueueMigrateMemObjects({buffer_insns, buffer_biases},
+    //                                                               0 /* 0 means from host*/));
+  cl::Event event;
+  uint64_t kernel_duration = 0;
+
+  //Launch the kernel
+  OCL_CHECK(err, err = OCL_CTX_p->q.enqueueTask(OCL_CTX_p->kernel, NULL, &event));
+
+  OCL_CHECK(err,
+                  err = OCL_CTX_p->q.enqueueMigrateMemObjects({buffer_outputs},
+                                                                   CL_MIGRATE_MEM_OBJECT_HOST));
+
+  OCL_CHECK(err, err = OCL_CTX_p->q.finish());
+
+  kernel_duration = get_duration_ns(event);
+  std::cout << "Wall Clock Time (Kernel execution): " << kernel_duration << std::endl;
+
 
 #if 0
   // Program

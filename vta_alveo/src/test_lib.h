@@ -14,6 +14,18 @@
 #include <time.h>
 #include <vector>
 
+#include "xcl2.hpp"
+
+
+// opencl context
+struct ocl_ctx {
+  cl::Context context;
+  cl::CommandQueue q;
+  cl::Kernel kernel;
+};
+
+extern struct ocl_ctx *OCL_CTX_p;
+
 #define NO_SIM 1
 
 #ifdef NO_SIM
