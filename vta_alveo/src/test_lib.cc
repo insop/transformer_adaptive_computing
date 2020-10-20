@@ -35,11 +35,14 @@ uint64_t vta_alveo(uint32_t insn_count,
              std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>>  &insns,
 
 						 // XXX TODO UPDATE THIS
-             VTAGenericUop *uops,
-             //std::vector<VTAGenericUop, aligned_allocator<VTAGenericUop>>  &uops,
+             //VTAGenericUop *uops,
+             std::vector<VTAGenericUop, aligned_allocator<VTAGenericUop>>  &uops,
 
-             inp_T *inputs,
-             wgt_T *weights,
+             //inp_T *inputs,
+             std::vector<inp_T, aligned_allocator<inp_T>> &inputs,
+             //wgt_T *weights,
+             std::vector<wgt_T, aligned_allocator<wgt_T>> &weights,
+
              //acc_T *biases,
              std::vector<acc_T, aligned_allocator<acc_T>> &biases,
              //acc_T *outputs
@@ -51,7 +54,9 @@ uint64_t vta_alveo(uint32_t insn_count,
   cl_int err;
 
   // TODO fix this
-	size_t matrix_size_bytes = (sizeof(insns[0]) * insns.size());
+	size_t matrix_size_bytes;
+
+	matrix_size_bytes = (sizeof(insns[0]) * insns.size());
 
   printf("%s:%d insn size %d, len %d total %d\n", __func__, __LINE__,
 			sizeof(insns[0]), insns.size(), matrix_size_bytes);
@@ -65,7 +70,30 @@ uint64_t vta_alveo(uint32_t insn_count,
 																	&err));
 
   // XXX uops
+	matrix_size_bytes = (sizeof(uops[0]) * uops.size());
+	matrix_size_bytes = 16;
+	OCL_CHECK(err,
+						cl::Buffer buffer_uops(OCL_CTX_p->context,
+																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+																	matrix_size_bytes,
+																  uops.data(),
+																	&err));
   // XXX inputs
+	matrix_size_bytes = (sizeof(inputs[0]) * inputs.size());
+	OCL_CHECK(err,
+						cl::Buffer buffer_inputs(OCL_CTX_p->context,
+																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+																	matrix_size_bytes,
+																  inputs.data(),
+																	&err));
+  // XXX weights
+	matrix_size_bytes = (sizeof(weights[0]) * weights.size());
+	OCL_CHECK(err,
+						cl::Buffer buffer_weights(OCL_CTX_p->context,
+																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+																	matrix_size_bytes,
+																  weights.data(),
+																	&err));
   //
 
 	matrix_size_bytes = (sizeof(biases[0]) * biases.size());
@@ -83,19 +111,19 @@ uint64_t vta_alveo(uint32_t insn_count,
 																	outputs.data(),
 																	&err));
 
-  //OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, 0));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, insn_count));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(1, buffer_insns));
-  //2
-  //3
-  //4
-  //XXX
+
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(2, buffer_uops));
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(3, buffer_inputs));
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(4, buffer_weights));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(5, buffer_biases));
+
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(6, buffer_outputs));
 
-  //OCL_CHECK(err,
-   //               err = OCL_CTX_p->q.enqueueMigrateMemObjects({buffer_insns, buffer_biases},
-    //                                                               0 /* 0 means from host*/));
+  OCL_CHECK(err,
+                  err = OCL_CTX_p->q.enqueueMigrateMemObjects({buffer_insns, buffer_uops, buffer_inputs, buffer_weights, buffer_biases},
+                                                                   0 /* 0 means from host*/));
   cl::Event event;
   uint64_t kernel_duration = 0;
 
@@ -573,6 +601,7 @@ int mem_test(int batch, int out_channels) {
                                  VTA_MEM_ID_ACC,
                                  xfer_size);
   // ISS OCL allocator <=====>
+
 #endif // NO_SIM
 
 
@@ -616,6 +645,11 @@ int mem_test(int batch, int out_channels) {
   // ISS OCL allocator =====>
   // Prepare the input buffer
   //
+  // XXX
+  std::vector<VTAGenericUop, aligned_allocator<VTAGenericUop>> uops_buf(16);
+  std::vector<inp_T, aligned_allocator<inp_T>> inputs_buf(xfer_size);
+  std::vector<wgt_T, aligned_allocator<wgt_T>> weights_buf(xfer_size);
+
   std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
   std::vector<acc_T, aligned_allocator<acc_T>> input_buf(xfer_size);
 
@@ -637,9 +671,14 @@ int mem_test(int batch, int out_channels) {
   uint64_t t_fpga = vta_alveo(ins_size,
                         //&insn_buf[0],
 												insn_buf,
-                        NULL,
-                        NULL,
-                        NULL,
+                        //NULL,
+                        //NULL,
+                        //NULL,
+
+												uops_buf,
+												inputs_buf,
+												weights_buf,
+
                         //&input_buf[0],
                         input_buf,
                         //&output_buf[0]);
