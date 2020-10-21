@@ -6,6 +6,8 @@
 
 #include "./test_lib.h"
 
+#include <malloc.h>
+
 #include "xcl2.hpp"
 #include <algorithm>
 #include <vector>
@@ -44,10 +46,12 @@ uint64_t vta_alveo(uint32_t insn_count,
              std::vector<wgt_T, aligned_allocator<wgt_T>> &weights,
 
              //acc_T *biases,
-             std::vector<acc_T, aligned_allocator<acc_T>> &biases,
+//             std::vector<acc_T, aligned_allocator<acc_T>> &biases,
+             acc_T *biases,
              //acc_T *outputs
-             std::vector<acc_T, aligned_allocator<acc_T>> &outputs
-						) {
+//             std::vector<acc_T, aligned_allocator<acc_T>> &outputs
+             acc_T *outputs
+) {
   // Performance counter variables
   uint64_t t_fpga;
   struct timespec start, stop;
@@ -96,20 +100,36 @@ uint64_t vta_alveo(uint32_t insn_count,
 																	&err));
   //
 
-	matrix_size_bytes = (sizeof(biases[0]) * biases.size());
+//	matrix_size_bytes = (sizeof(biases[0]) * biases.size());
+//	OCL_CHECK(err,
+//						cl::Buffer buffer_biases(OCL_CTX_p->context,
+//																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
+//																	matrix_size_bytes,
+//																  biases.data(),
+//																	&err));
+
+	matrix_size_bytes = VTA_ACC_ELEM_BYTES*1024;
 	OCL_CHECK(err,
 						cl::Buffer buffer_biases(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
 																	matrix_size_bytes,
-																  biases.data(),
+																  biases,
 																	&err));
-	matrix_size_bytes = (sizeof(outputs[0]) * outputs.size());
-	OCL_CHECK(err,
-						cl::Buffer buffer_outputs(OCL_CTX_p->context,
-																	CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
-																	matrix_size_bytes,
-																	outputs.data(),
-																	&err));
+
+//	matrix_size_bytes = (sizeof(outputs[0]) * outputs.size());
+//	OCL_CHECK(err,
+//						cl::Buffer buffer_outputs(OCL_CTX_p->context,
+//																	CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+//																	matrix_size_bytes,
+//																	outputs.data(),
+//																	&err));
+  matrix_size_bytes = VTA_ACC_ELEM_BYTES*1024;
+  OCL_CHECK(err,
+            cl::Buffer buffer_outputs(OCL_CTX_p->context,
+                                      CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+                                      matrix_size_bytes,
+                                      outputs,
+                                      &err));
 
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, insn_count));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(1, buffer_insns));
@@ -117,6 +137,7 @@ uint64_t vta_alveo(uint32_t insn_count,
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(2, buffer_uops));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(3, buffer_inputs));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(4, buffer_weights));
+
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(5, buffer_biases));
 
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(6, buffer_outputs));
@@ -386,7 +407,8 @@ void * allocBuffer(size_t num_bytes) {
 #ifdef NO_SIM
   // ISS
   //return cma_alloc(num_bytes, CACHED);
-  return (void*)NULL;
+  return memalign(64, num_bytes);
+  //return (void*)NULL;
 #else
   return malloc(num_bytes);
 #endif
@@ -573,6 +595,8 @@ int mem_test(int batch, int out_channels) {
   // Make sure we don't exceed buffer bounds
   assert(xfer_size <= VTA_ACC_BUFF_DEPTH);
 
+  printf("%s:%d xfer_size %d VTA_ACC_ELEM_BYTES %d \n", __func__, __LINE__ , xfer_size, VTA_ACC_ELEM_BYTES);
+
 #ifndef NO_SIM
   // Initialize instruction buffer
   VTAGenericInsn *insn_buf =
@@ -627,6 +651,8 @@ int mem_test(int batch, int out_channels) {
     }
   }
 
+  printf("%s:%d batch %d out_channels %d VTA_BATCH %d VTA_BLOCK_OUT %d\n",
+         __func__, __LINE__, batch, out_channels, VTA_BATCH, VTA_BLOCK_OUT);
 #ifndef NO_SIM
 
 
@@ -650,15 +676,44 @@ int mem_test(int batch, int out_channels) {
   std::vector<inp_T, aligned_allocator<inp_T>> inputs_buf(xfer_size);
   std::vector<wgt_T, aligned_allocator<wgt_T>> weights_buf(xfer_size);
 
-  std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
-  std::vector<acc_T, aligned_allocator<acc_T>> input_buf(xfer_size);
+//  std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
+//  std::vector<acc_T, aligned_allocator<acc_T>> biass_buf(xfer_size);
 
-  pack2dBuffer<acc_T, VTA_ACC_WIDTH>(input_buf.data(), //&input_buf[0],
+  acc_T *biass_buf = static_cast<acc_T *>(allocBuffer(VTA_ACC_ELEM_BYTES * xfer_size));
+  pack2dBuffer<acc_T, VTA_ACC_WIDTH>(biass_buf,
                                      inputs,
                                      batch,
                                      out_channels,
                                      VTA_BATCH,
                                      VTA_BLOCK_OUT);
+
+  // Prepare the output buffer
+  acc_T *output_buf = static_cast<acc_T *>(allocBuffer(VTA_ACC_ELEM_BYTES * xfer_size));
+
+  // for testing
+  // initilize buf
+//  printf("%s:%d init upto index %d\n", __func__, __LINE__, output_buf.size());
+//  for (int i = 0; i < output_buf.size(); i++) {
+//    inputs_buf[i] = 0;
+//    weights_buf[i] = 0;
+//
+////    biass_buf[i] = 0x12345678;
+//    output_buf[i] = 0;
+//  }
+
+  for (int i = 0; i < 10; i++)
+    printf("%s%d bias[%d] 0x%x\n", __func__, __LINE__, i, biass_buf[i]);
+
+  // XXX test
+//  biass_buf[0] = 0x5678;
+//  biass_buf[1] = 0x1234;
+
+//  pack2dBuffer<acc_T, VTA_ACC_WIDTH>(&input_buf[0], //input_buf.data(), //&input_buf[0],
+//                                     inputs,
+//                                     batch,
+//                                     out_channels,
+//                                     VTA_BATCH,
+//                                     VTA_BLOCK_OUT);
 
   //std::vector<acc_T, aligned_allocator<acc_T>> output_buf(xfer_size);
 
@@ -680,7 +735,7 @@ int mem_test(int batch, int out_channels) {
 												weights_buf,
 
                         //&input_buf[0],
-                        input_buf,
+                        biass_buf,
                         //&output_buf[0]);
                         output_buf
 												);
@@ -688,6 +743,11 @@ int mem_test(int batch, int out_channels) {
   printf("INFO - Synchronization time: %.3lfms\n", static_cast<float>(t_fpga) / 1E6);
   printf("INFO - Throughput: %.3lfGbs/s\n",
          static_cast<float>(xfer_size) * 2 * VTA_ACC_ELEM_BYTES * 8 / t_fpga);
+
+//  printf("----> checking output\n");
+//  for (int i = 0; i < output_buf.size(); i++) {
+//    printf("%s:%d output[%d] =0x%x\n", __func__, __LINE__, i, output_buf[i]);
+//  }
 
   // Unpack output data
   acc_T **outputs = alloc2dArray<acc_T>(batch, out_channels);
