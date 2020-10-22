@@ -34,9 +34,10 @@ uint64_t get_duration_ns(const cl::Event &event) {
 // pync driver to call h/w
 uint64_t vta_alveo(uint32_t insn_count,
              //VTAGenericInsn *insns,
-             std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>>  &insns,
+//             std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>>  &insns,
+              VTAGenericInsn *insns,
 
-						 // XXX TODO UPDATE THIS
+        // XXX TODO UPDATE THIS
              //VTAGenericUop *uops,
              std::vector<VTAGenericUop, aligned_allocator<VTAGenericUop>>  &uops,
 
@@ -57,47 +58,53 @@ uint64_t vta_alveo(uint32_t insn_count,
   struct timespec start, stop;
   cl_int err;
 
+  std::vector<cl::Memory> inBufVec, outBufVec;
+
   // TODO fix this
-	size_t matrix_size_bytes;
+//	size_t matrix_size_bytes;
 
-	matrix_size_bytes = (sizeof(insns[0]) * insns.size());
+  size_t insn_matrix_size_bytes = sizeof(VTAGenericInsn) * insn_count;
 
-  printf("%s:%d insn size %d, len %d total %d\n", __func__, __LINE__,
-			sizeof(insns[0]), insns.size(), matrix_size_bytes);
+//  printf("%s:%d insn size %d, len %d total %d\n", __func__, __LINE__,
+//			sizeof(insns[0]), insns.size(), matrix_size_bytes);
   printf("%s:%d ocl context 0x%x\n", __func__, __LINE__, OCL_CTX_p->context);
 
 	OCL_CHECK(err,
 						cl::Buffer buffer_insns(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-																	matrix_size_bytes,
-																	insns.data(),
+                                  insn_matrix_size_bytes,
+                                  insns,
+                                  // insns.data(),
 																	&err));
 
+  inBufVec.push_back(buffer_insns);
   // XXX uops
-	matrix_size_bytes = (sizeof(uops[0]) * uops.size());
-	matrix_size_bytes = 16;
+	size_t uops_matrix_size_bytes = (sizeof(uops[0]) * uops.size());
 	OCL_CHECK(err,
 						cl::Buffer buffer_uops(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-																	matrix_size_bytes,
+                                  uops_matrix_size_bytes,
 																  uops.data(),
 																	&err));
+  inBufVec.push_back(buffer_uops);
   // XXX inputs
-	matrix_size_bytes = (sizeof(inputs[0]) * inputs.size());
+	size_t inputs_matrix_size_bytes = (sizeof(inputs[0]) * inputs.size());
 	OCL_CHECK(err,
 						cl::Buffer buffer_inputs(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-																	matrix_size_bytes,
+                                  inputs_matrix_size_bytes,
 																  inputs.data(),
 																	&err));
+  inBufVec.push_back(buffer_inputs);
   // XXX weights
-	matrix_size_bytes = (sizeof(weights[0]) * weights.size());
+	size_t weights_matrix_size_bytes = (sizeof(weights[0]) * weights.size());
 	OCL_CHECK(err,
 						cl::Buffer buffer_weights(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-																	matrix_size_bytes,
+                                  weights_matrix_size_bytes,
 																  weights.data(),
 																	&err));
+  inBufVec.push_back(buffer_weights);
   //
 
 //	matrix_size_bytes = (sizeof(biases[0]) * biases.size());
@@ -108,13 +115,14 @@ uint64_t vta_alveo(uint32_t insn_count,
 //																  biases.data(),
 //																	&err));
 
-	matrix_size_bytes = VTA_ACC_ELEM_BYTES*1024;
+	size_t biases_matrix_size_bytes = VTA_ACC_ELEM_BYTES*1024;
 	OCL_CHECK(err,
 						cl::Buffer buffer_biases(OCL_CTX_p->context,
 																	CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-																	matrix_size_bytes,
+                                  biases_matrix_size_bytes,
 																  biases,
 																	&err));
+  inBufVec.push_back(buffer_biases);
 
 //	matrix_size_bytes = (sizeof(outputs[0]) * outputs.size());
 //	OCL_CHECK(err,
@@ -123,15 +131,19 @@ uint64_t vta_alveo(uint32_t insn_count,
 //																	matrix_size_bytes,
 //																	outputs.data(),
 //																	&err));
-  matrix_size_bytes = VTA_ACC_ELEM_BYTES*1024;
+  size_t outputs_matrix_size_bytes = VTA_ACC_ELEM_BYTES*1024;
   OCL_CHECK(err,
             cl::Buffer buffer_outputs(OCL_CTX_p->context,
                                       CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
-                                      matrix_size_bytes,
+                                      outputs_matrix_size_bytes,
                                       outputs,
                                       &err));
+  outBufVec.push_back(buffer_outputs);
 
-  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, insn_count));
+  cl::Event kernel_event, read_event, write_event;
+
+//  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, insn_count));
+  OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(0, sizeof(cl_int), (void*)&insn_count));
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(1, buffer_insns));
 
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(2, buffer_uops));
@@ -142,23 +154,47 @@ uint64_t vta_alveo(uint32_t insn_count,
 
   OCL_CHECK(err, err = OCL_CTX_p->kernel.setArg(6, buffer_outputs));
 
+  // move to the device
   OCL_CHECK(err,
-                  err = OCL_CTX_p->q.enqueueMigrateMemObjects({buffer_insns, buffer_uops, buffer_inputs, buffer_weights, buffer_biases},
-                                                                   0 /* 0 means from host*/));
-  cl::Event event;
+                  err = OCL_CTX_p->q.enqueueMigrateMemObjects(inBufVec,
+                                                                   0 /* 0 means from host*/,NULL, &write_event));
+  clWaitForEvents(1, (const cl_event *)&write_event);
+
+  OCL_CTX_p->q.enqueueBarrier();
+
+  uint64_t read_duration = 0;
   uint64_t kernel_duration = 0;
+  uint64_t write_duration = 0;
+
+  std::vector<cl::Event> eventList;
+  eventList.push_back(write_event);
 
   //Launch the kernel
-  OCL_CHECK(err, err = OCL_CTX_p->q.enqueueTask(OCL_CTX_p->kernel, NULL, &event));
+  OCL_CHECK(err, err = OCL_CTX_p->q.enqueueTask(OCL_CTX_p->kernel, &eventList, &kernel_event));
+  clWaitForEvents(1, (const cl_event *)&kernel_event);
+
+  OCL_CTX_p->q.enqueueBarrier();
+  eventList.clear();
+  eventList.push_back(kernel_event);
 
   OCL_CHECK(err,
-                  err = OCL_CTX_p->q.enqueueMigrateMemObjects({buffer_outputs},
-                                                                   CL_MIGRATE_MEM_OBJECT_HOST));
+                  err = OCL_CTX_p->q.enqueueMigrateMemObjects(outBufVec,
+                                                                   CL_MIGRATE_MEM_OBJECT_HOST, &eventList, &read_event));
 
+  OCL_CTX_p->q.enqueueBarrier();
+  clWaitForEvents(1, (const cl_event *)&read_event);
+
+//  OCL_CHECK(err, err = OCL_CTX_p->q.flush());
   OCL_CHECK(err, err = OCL_CTX_p->q.finish());
 
-  kernel_duration = get_duration_ns(event);
+  write_duration = get_duration_ns(write_event);
+  std::cout << "Wall Clock Time (write execution): " << write_duration << std::endl;
+
+  kernel_duration = get_duration_ns(kernel_event);
   std::cout << "Wall Clock Time (Kernel execution): " << kernel_duration << std::endl;
+
+//  read_duration = get_duration_ns(read_event);
+//  std::cout << "Wall Clock Time (read execution): " << read_duration << std::endl;
 
 
 #if 0
@@ -407,7 +443,10 @@ void * allocBuffer(size_t num_bytes) {
 #ifdef NO_SIM
   // ISS
   //return cma_alloc(num_bytes, CACHED);
-  return memalign(64, num_bytes);
+//  return memalign(64, num_bytes);
+  void *a;
+  posix_memalign((void**)&a, 4096, num_bytes);
+  return a;
   //return (void*)NULL;
 #else
   return malloc(num_bytes);
@@ -585,6 +624,8 @@ int mem_test(int batch, int out_channels) {
   assert(out_channels % VTA_BLOCK_OUT == 0);
   assert(batch % VTA_BATCH == 0);
 
+  printParameters();
+
   printf("=====================================================================================\n");
   printf("INFO - Load/Store test: batch=%d, out_channels=%d\n",
          batch, out_channels);
@@ -606,16 +647,17 @@ int mem_test(int batch, int out_channels) {
   insn_buf[0] = getLoadStoreInsn(VTA_OPCODE_LOAD,
                                  VTA_MEM_ID_ACC,
                                  xfer_size);
+
   // Store data block
   insn_buf[1] = getLoadStoreInsn(VTA_OPCODE_STORE,
                                  VTA_MEM_ID_ACC,
                                  xfer_size);
 
 #else
-  // ISS OCL allocator =====>
   // Initialize instruction buffer
-  //
-  std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>> insn_buf(ins_size);
+  VTAGenericInsn *insn_buf =
+          static_cast<VTAGenericInsn *>(allocBuffer(sizeof(VTAGenericInsn) * ins_size));
+
   // Load data block
   insn_buf[0] = getLoadStoreInsn(VTA_OPCODE_LOAD,
                                  VTA_MEM_ID_ACC,
@@ -624,6 +666,19 @@ int mem_test(int batch, int out_channels) {
   insn_buf[1] = getLoadStoreInsn(VTA_OPCODE_STORE,
                                  VTA_MEM_ID_ACC,
                                  xfer_size);
+
+  // ISS OCL allocator =====>
+  // Initialize instruction buffer
+  //
+//  std::vector<VTAGenericInsn, aligned_allocator<VTAGenericInsn>> insn_buf(ins_size);
+//  // Load data block
+//  insn_buf[0] = getLoadStoreInsn(VTA_OPCODE_LOAD,
+//                                 VTA_MEM_ID_ACC,
+//                                 xfer_size);
+//  // Store data block
+//  insn_buf[1] = getLoadStoreInsn(VTA_OPCODE_STORE,
+//                                 VTA_MEM_ID_ACC,
+//                                 xfer_size);
   // ISS OCL allocator <=====>
 
 #endif // NO_SIM
@@ -701,8 +756,10 @@ int mem_test(int batch, int out_channels) {
 //    output_buf[i] = 0;
 //  }
 
-  for (int i = 0; i < 10; i++)
+  for (int i = 0; i < 10; i++) {
     printf("%s%d bias[%d] 0x%x\n", __func__, __LINE__, i, biass_buf[i]);
+    printf("%s%d output[%d] 0x%x\n", __func__, __LINE__, i, output_buf[i]);
+  }
 
   // XXX test
 //  biass_buf[0] = 0x5678;
@@ -739,7 +796,7 @@ int mem_test(int batch, int out_channels) {
                         //&output_buf[0]);
                         output_buf
 												);
-  // Report on timining
+  // Report on timing
   printf("INFO - Synchronization time: %.3lfms\n", static_cast<float>(t_fpga) / 1E6);
   printf("INFO - Throughput: %.3lfGbs/s\n",
          static_cast<float>(xfer_size) * 2 * VTA_ACC_ELEM_BYTES * 8 / t_fpga);
